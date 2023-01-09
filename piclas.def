@@ -1,0 +1,134 @@
+Bootstrap: library
+From: library/default/ubuntu:jammy
+
+%environment
+    # PICLas executables
+    # gcc
+#    export CC=/root/libs/gcc-12.2.0/bin/gcc
+#    export CXX=/root/libs/gcc-12.2.0/bin/g++
+#    export FC=/root/libs/gcc-12.2.0/bin/gfortran
+#    export PATH="/root/libs/gcc-12.2.0/include/c++/11.2.0:$PATH"
+#    export PATH="/root/libs/gcc-12.2.0/bin:$PATH"
+#    export LD_LIBRARY_PATH="/root/libs/gcc-12.2.0/lib64:$LD_LIBRARY_PATH"
+    # OpenMPI
+    # export OMPI_DIR=/root/openmpi/4.1.1
+    # export SINGULARITY_OMPI_DIR=$OMPI_DIR
+    # export SINGULARITYENV_APPEND_PATH=$OMPI_DIR/bin
+    # export SINGULAIRTYENV_APPEND_LD_LIBRARY_PATH=$OMPI_DIR/lib
+    # export MPI_DIR=/root/libs/openmpi-4.1.4
+    # export PATH=/root/libs/openmpi-4.1.4/bin:$PATH
+    # export LD_LIBRARY_PATH=/root/libs/openmpi-4.1.4/lib:$LD_LIBRARY_PATH
+    # # HDF5
+    # export HDF5_DIR=/root/libs/hdf5-1.13.3
+    # export HDF5_ROOT=/root/libs/hdf5-1.13.3
+    # export PATH="/root/libs/hdf5-1.13.3/include:$PATH"
+    # export PATH="/root/libs/hdf5-1.13.3/bin:$PATH"
+    # export LD_LIBRARY_PATH="/root/libs/hdf5-1.13.3/lib:$LD_LIBRARY_PATH"
+
+%post
+    # 1. Install prerequisites
+    apt-get update && apt-get install -y sudo git wget neovim software-properties-common \
+        cmake build-essential liblapack3 liblapack-dev gfortran g++ mpi-default-dev zlib1g-dev \
+        exuberant-ctags ninja-build libmpfr-dev libmpc-dev gcc-12 g++-12 gfortran-12
+
+    piclas_libs_path=/usr/lib/piclas_libs
+
+    mkdir -p /usr/lib/piclas_libs
+    cd $piclas_libs_path
+
+#    gcc_version="12.2.0"
+
+    # 2. Install gcc-12
+#    wget https://ftp.gwdg.de/pub/misc/gcc/releases/gcc-12.2.0/gcc-$gcc_version.tar.gz
+#    tar -xzf gcc-$gcc_version.tar.gz
+#    cd gcc-$gcc_version
+#    mkdir -p build && cd build
+
+#    gcc_path=$(cd ../ && pwd)
+
+#    ../configure -v --prefix=$gcc_path --enable-languages=c,c++,objc,obj-c++,fortran --enable-shared --disable-multilib --disable-bootstrap --enable-checking=release --with-sysroot=/ --with-system-zlib
+#    make -j && make install
+
+#    export CC=$gccpath/bin/gcc
+#    export CXX=$gccpath/bin/g++
+#    export FC=$gccpath/bin/gfortran
+#    export PATH="$gccpath/include/c++/11.2.0:$PATH"
+#    export PATH="$gccpath/bin:$PATH"
+#    export LD_LIBRARY_PATH="$gccpath/lib64:$LD_LIBRARY_PATH"
+    
+    # 3. Build OpenMPI
+    openmpi_version=4.1.4
+    wget "https://download.open-mpi.org/release/open-mpi/v4.1/openmpi-4.1.4.tar.gz"
+    tar -xzf openmpi-$openmpi_version.tar.gz
+    cd openmpi-$openmpi_version && mkdir -p build && cd build
+
+    openmpi_path=$(cd ../ && pwd)
+
+    ../configure --prefix=$openmpi_path CC=$(which gcc-12) CXX=$(which g++-12) FC=$(which gfortran-12)
+    make -j && make install
+
+    export MPI_DIR=$openmpi_path
+    export PATH="$openmpi_path/bin:$PATH"
+    export LD_LIBRARY_PATH="$openmpi_path/lib:$LD_LIBRARY_PATH"
+
+    # 4. Build HDF5
+    hdf5_version=1.13.3
+    cd $piclas_libs_path
+    wget https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.13/hdf5-1.13.3/src/hdf5-1.13.3.tar.gz
+    tar -xzf hdf5-$hdf5_version.tar.gz
+    cd hdf5-$hdf5_version && mkdir -p build && cd build
+
+    hdf5_path=$(cd ../ && pwd)
+
+    ../configure --prefix=$hdf5_path --with-pic --enable-fortran --enable-fortran2003 --disable-shared --enable-parallel CC=$(which mpicc) CXX=$(which mpicxx) FC=$(which mpifort)
+    make -j && make install
+
+    export HDF5_DIR=$hdf5_path
+    export HDF5_ROOT=$hdf5_path
+    export PATH="$hdf5_path/include:$PATH"
+    export PATH="$hdf5_path/bin:$PATH"
+    export LD_LIBRARY_PATH="$hdf5_path/lib:$LD_LIBRARY_PATH"
+
+    # 5. Build hopr
+    cd $piclas_libs_path
+    git clone https://github.com/flexi-framework/hopr.git
+    cd hopr && mkdir -p build && cd build
+    # Compile
+    CC=$(which gcc-12)
+    FC=$(which gfortran-12)
+    cmake -DLIBS_BUILD_CGNS=ON -DLIBS_BUILD_HDF5=ON -DLIBS_USE_MPI=OFF ..
+    make -j
+
+    # 6. Clone PICLas
+    cd /usr/lib
+    git clone https://github.com/piclas-framework/piclas.git
+    cd piclas
+
+    # 6.1 Create different build folders for different executable
+    piclas_build_path=/usr/lib/piclas/build
+    mkdir -p build && cd build
+    mkdir -p DSMC POISSON_RK3 POISSON_BORIS_LEAPFROG
+
+    # 6.2 DSMC
+    cd DSMC
+    cmake -DLIBS_USE_MPI=ON -DPICLAS_TIMEDISCMETHOD=DSMC -DLIBS_BUILD_HDF5=OFF -DPOSTI_BUILD_PICLAS2VTK=OFF -DPOSTI_BUILD_SUPERB=OFF ../..
+    make -j
+
+    # 6.3 POISSON_RK3
+    cd $piclas_build_path/POISSON_RK3
+    cmake -DLIBS_USE_MPI=ON -DPICLAS_TIMEDISCMETHOD=RK3 -DLIBS_BUILD_HDF5=ON -DPICLAS_EQNSYSNAME=poisson -DPOSTI_BUILD_PICLAS2VTK=OFF -DPOSTI_BUILD_SUPERB=OFF ../..
+    make -j
+
+    # 6.4 POISSON_BORIS_LEAPFROG
+    cd $piclas_build_path/POISSON_BORIS_LEAPFROG
+    cmake -DLIBS_USE_MPI=ON -DPICLAS_TIMEDISCMETHOD=Boris-Leapfrog -DLIBS_BUILD_HDF5=ON -DPICLAS_EQNSYSNAME=poisson -DPOSTI_BUILD_PICLAS2VTK=OFF -DPOSTI_BUILD_SUPERB=OFF ../..
+    make -j
+
+# %runscript
+#     alias hopr="/usr/lib/piclas_libs/hopr/build/bin/hopr"
+#     alias piclas_DSMC="/usr/lib/piclas/build/DSMC/bin/piclas"
+#     alias piclas_POISSON_RK3="/usr/lib/piclas/build/POISSON_RK3/bin/piclas"
+#     alias piclas_POISSON_BORIS_LEAPFROG="/usr/lib/piclas/build/POISSON_BORIS_LEAPFROG/bin/piclas"
+    # export piclas_DSMC=/usr/lib/piclas/build/DSMC/bin/piclas
+    # export piclas_POISSON_RK3=/usr/lib/piclas/build/POISSON_RK3/bin/piclas
+    # export piclas_POISSON_BORIS_LEAPFROG=/usr/lib/piclas/build/POISSON_BORIS_LEAPFROG/bin/piclas
