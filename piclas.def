@@ -3,6 +3,10 @@ From: library/default/ubuntu:jammy
 
 %environment
     # PICLas executables
+    alias hopr="/usr/lib/piclas_libs/hopr/build/bin/hopr"
+    alias piclas_DSMC="/usr/lib/piclas/build/DSMC/bin/piclas"
+    alias piclas_POISSON_RK3="/usr/lib/piclas/build/POISSON_RK3/bin/piclas"
+    alias piclas_POISSON_BORIS_LEAPFROG="/usr/lib/piclas/build/POISSON_BORIS_LEAPFROG/bin/piclas"
     # gcc
 #    export CC=/root/libs/gcc-12.2.0/bin/gcc
 #    export CXX=/root/libs/gcc-12.2.0/bin/g++
